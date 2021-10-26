@@ -2,6 +2,8 @@ const Router = require('express');
 const User = require('../models/User');
 const bcrypt = require('bcryptjs');
 const {check, validationResult} = require('express-validator');
+const config = require('config');
+const jwt = require('jsonwebtoken');
 const router = new Router();
 
 router.post('/registration',
@@ -24,11 +26,40 @@ router.post('/registration',
           return res.status(400).json({message: `User with email ${email} already exists`});
         }
 
-        const hashPassword = await bcrypt.hash(password, 15); // хэшируем пароль для безопасности
+        const hashPassword = await bcrypt.hash(password, 8); // хэшируем пароль для безопасности
         const user = new User({email, password: hashPassword}); // если новый пользователь, то создаем
         await user.save(); // сохраняем в базе данных
         return res.json({message: 'User has been created!'});
 
+      } catch (e) {
+        console.log(e);
+        res.send({message: 'Server error!'})
+      }
+    });
+
+router.post('/login',
+    async (req, res) => {
+      try {
+        const {email, password} = req.body;
+        const user = await User.findOne({email});
+        if (!user) {
+          return res.status(404).json({message: 'User has not been found'});
+        }
+        const isPassValid = bcrypt.compareSync(password, user.password);
+        if (!isPassValid) {
+          return res.status(400).json({message: 'Invalid password'});
+        }
+        const token = jwt.sign({id: user.id}, config.get('secretKey'), {expiresIn: '1h'});
+
+        return res.json({
+          token,
+          user: {
+            id: user.id,
+            email: user.email,
+            diskSpace: user.diskSpace,
+            usedSpace: user.usedSpace
+          }
+        })
       } catch (e) {
         console.log(e);
         res.send({message: 'Server error!'})
